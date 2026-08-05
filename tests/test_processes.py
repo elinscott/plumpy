@@ -1037,6 +1037,90 @@ class TestProcessNamespace(unittest.TestCase):
         self.assertEqual(process.outputs[namespace]['nested']['one'], 1)
         self.assertEqual(process.outputs[namespace]['nested']['two'], 2)
 
+    def test_out_does_not_mutate_the_spec(self):
+        """Test that emitting a namespaced output leaves the process specification untouched.
+
+        The specification is built once per process class and shared by all its instances, so a port added while
+        emitting would validate the outputs of every later instance of that class.
+        """
+
+        class DynamicOutputProcess(Process):
+            @classmethod
+            def define(cls, spec):
+                super().define(spec)
+                spec.outputs.valid_type = int
+
+            def run(self):
+                self.out('alphas.filled', 1)
+
+        description = DynamicOutputProcess.spec().outputs.get_description()
+
+        process = DynamicOutputProcess()
+        process.execute()
+
+        self.assertTrue(process.is_successful)
+        self.assertEqual(process.outputs, {'alphas': {'filled': 1}})
+        self.assertEqual(DynamicOutputProcess.spec().outputs.get_description(), description)
+
+    def test_out_leaf_after_namespace(self):
+        """Test that a leaf value can be emitted under a name a sibling process used as a namespace."""
+
+        class DynamicOutputProcess(Process):
+            @classmethod
+            def define(cls, spec):
+                super().define(spec)
+                spec.input('nested', valid_type=bool)
+                spec.outputs.valid_type = int
+
+            def run(self):
+                if self.inputs.nested:
+                    self.out('alphas.filled', 1)
+                else:
+                    self.out('alphas', 1)
+
+        first = DynamicOutputProcess(inputs={'nested': True})
+        first.execute()
+
+        second = DynamicOutputProcess(inputs={'nested': False})
+        second.execute()
+
+        self.assertTrue(second.is_successful)
+        self.assertEqual(second.outputs, {'alphas': 1})
+
+    def test_out_undeclared_namespace_not_dynamic(self):
+        """Test that emitting into a namespace that does not exist fails if the specification is not dynamic."""
+
+        class StaticOutputProcess(Process):
+            @classmethod
+            def define(cls, spec):
+                super().define(spec)
+
+            def run(self):
+                self.out('alphas.filled', 1)
+
+        process = StaticOutputProcess()
+
+        with self.assertRaises(ValueError):
+            process.execute()
+
+    def test_out_namespace_occupied_by_port(self):
+        """Test that emitting into a namespace occupied by a regular port raises."""
+
+        class OccupiedOutputProcess(Process):
+            @classmethod
+            def define(cls, spec):
+                super().define(spec)
+                spec.output('alphas', valid_type=int)
+                spec.outputs.dynamic = True
+
+            def run(self):
+                self.out('alphas.filled', 1)
+
+        process = OccupiedOutputProcess()
+
+        with self.assertRaises(ValueError):
+            process.execute()
+
 
 class TestProcessEvents(unittest.TestCase):
     def test_basic_events(self):

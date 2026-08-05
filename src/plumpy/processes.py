@@ -41,7 +41,6 @@ from . import (
     exceptions,
     futures,
     persistence,
-    ports,
     process_comms,
     process_states,
     utils,
@@ -1379,6 +1378,10 @@ class Process(StateMachine, persistence.Savable, metaclass=ProcessStateMachineMe
         against the PortNamespace, which means it will be checked for dynamicity and whether
         the type of the value is valid
 
+        Emitting an output never changes the process specification. The specification is built once per process
+        class and shared by all its instances, so a port added here would validate the outputs of every later
+        instance of that class.
+
         :param output_port: the name of the output port, can be namespaced
         :param value: the value for the output port
         :raises: ValueError if the output value is not validated against the port
@@ -1390,23 +1393,17 @@ class Process(StateMachine, persistence.Savable, metaclass=ProcessStateMachineMe
         namespace = output_port.split(namespace_separator)
         port_name = namespace.pop()
 
-        if namespace:
-            port_namespace = cast(
-                ports.PortNamespace,
-                self.spec().outputs.get_port(namespace_separator.join(namespace), create_dynamically=True),
-            )
-        else:
-            port_namespace = self.spec().outputs
+        port_namespace, port_key = self.spec().outputs.resolve(output_port)
 
         validation_error = None
         try:
-            port = port_namespace[port_name]
+            port = port_namespace[port_key]
             dynamic = False
             validation_error = port.validate(value)
         except KeyError:
             port = port_namespace
             dynamic = True
-            validation_error = port.validate_dynamic_ports({port_name: value})
+            validation_error = port.validate_dynamic_ports({port_key: value})
 
         if validation_error:
             msg = f"Error validating output '{value}' for port '{validation_error.port}': {validation_error.message}"

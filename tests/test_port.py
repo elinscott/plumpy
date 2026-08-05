@@ -227,6 +227,42 @@ class TestPortNamespace(TestCase):
         assert sub_namespace.dynamic
         assert sub_namespace.name == 'undefined'
 
+    def test_port_namespace_resolve(self):
+        """Test that ``resolve`` returns the namespace that governs a declared port and its name within it."""
+        port_namespace = PortNamespace(self.BASE_PORT_NAMESPACE_NAME)
+        sub_namespace = port_namespace.create_port_namespace('sub.name')
+        sub_namespace[self.BASE_PORT_NAME] = self.port
+
+        assert port_namespace.resolve(self.BASE_PORT_NAME) == (port_namespace, self.BASE_PORT_NAME)
+        assert port_namespace.resolve('sub') == (port_namespace, 'sub')
+        assert port_namespace.resolve('sub.name') == (port_namespace['sub'], 'name')
+        assert port_namespace.resolve(f'sub.name.{self.BASE_PORT_NAME}') == (sub_namespace, self.BASE_PORT_NAME)
+
+    def test_port_namespace_resolve_dynamic(self):
+        """Test that ``resolve`` stops at the closest dynamic namespace and does not create anything."""
+        port_namespace = PortNamespace(self.BASE_PORT_NAMESPACE_NAME, dynamic=True)
+        sub_namespace = port_namespace.create_port_namespace('sub', dynamic=True)
+
+        assert port_namespace.resolve('nested.undefined') == (port_namespace, 'nested.undefined')
+        assert port_namespace.resolve('sub.nested.undefined') == (sub_namespace, 'nested.undefined')
+        assert list(port_namespace) == ['sub']
+        assert list(sub_namespace) == []
+
+    def test_port_namespace_resolve_not_dynamic(self):
+        """Test that ``resolve`` raises for an undeclared namespace that is not dynamic."""
+        port_namespace = PortNamespace(self.BASE_PORT_NAMESPACE_NAME)
+
+        with self.assertRaises(ValueError):
+            port_namespace.resolve('undefined.name')
+
+    def test_port_namespace_resolve_occupied_by_port(self):
+        """Test that ``resolve`` raises if a namespace of the name is occupied by a port."""
+        port_namespace = PortNamespace(self.BASE_PORT_NAMESPACE_NAME, dynamic=True)
+        port_namespace[self.BASE_PORT_NAME] = self.port
+
+        with self.assertRaises(ValueError):
+            port_namespace.resolve(f'{self.BASE_PORT_NAME}.name')
+
     def test_port_namespace_create_port_namespace(self):
         """
         Test the create_port_namespace function of the PortNamespace class

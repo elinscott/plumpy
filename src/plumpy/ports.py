@@ -7,7 +7,21 @@ import inspect
 import json
 import logging
 import warnings
-from typing import Any, Callable, Dict, Iterator, List, Mapping, MutableMapping, Optional, Sequence, Type, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 from plumpy.utils import AttributesFrozendict, is_mutable_property, type_check
 
@@ -435,7 +449,9 @@ class PortNamespace(collections.abc.MutableMapping, Port):
 
         :param name: name (potentially namespaced) of the port to retrieve.
         :param create_dynamically: If set to ``True``, dynamically create the requested port if it doesn't exist and the
-            namespace is dynamic, instead of raising a ``ValueError``.
+            namespace is dynamic, instead of raising a ``ValueError``. The created port is stored on this namespace, so
+            do not use this to look up a port of a specification that is shared between process instances. Use
+            :meth:`resolve` instead.
         :returns: Port
         :raises: ValueError if port or namespace does not exist
         """
@@ -469,6 +485,41 @@ class PortNamespace(collections.abc.MutableMapping, Port):
             )
 
         return self[port_name]
+
+    def resolve(self, name: str) -> Tuple['PortNamespace', str]:
+        """Resolve a (namespaced) port name to the namespace that governs it and its key within it.
+
+        This never modifies the namespace, unlike :meth:`get_port` with ``create_dynamically=True``. Where that
+        method would create the missing namespaces, this one stops at the closest enclosing dynamic namespace and
+        returns the rest of ``name`` as a single key. The namespaces ``get_port`` creates are clones of that
+        namespace, so they impose the same ``dynamic`` and ``valid_type`` on the value.
+
+        :param name: name (potentially namespaced) of the port.
+        :returns: tuple of the namespace and the key of ``name`` within it. The key still carries the namespace
+            separator if part of ``name`` is undeclared, in which case it matches no declared port.
+        :raises ValueError: if a namespace in ``name`` does not exist and the namespace containing it is not
+            dynamic, or is occupied by a port that is not a namespace.
+        """
+        namespace = name.split(self.NAMESPACE_SEPARATOR)
+        port_namespace = self
+
+        while len(namespace) > 1:
+            port_name = namespace[0]
+
+            if port_name not in port_namespace:
+                if not port_namespace.dynamic:
+                    raise ValueError(f"port '{port_name}' does not exist in port namespace '{port_namespace.name}'")
+                break
+
+            port = port_namespace[port_name]
+
+            if not isinstance(port, PortNamespace):
+                raise ValueError(f"port '{port_name}' in port namespace '{port_namespace.name}' is not a namespace")
+
+            port_namespace = port
+            namespace.pop(0)
+
+        return port_namespace, self.NAMESPACE_SEPARATOR.join(namespace)
 
     def create_port_namespace(self, name: str, **kwargs: Any) -> 'PortNamespace':
         """
