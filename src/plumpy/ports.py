@@ -496,7 +496,9 @@ class PortNamespace(collections.abc.MutableMapping, Port):
 
         :param name: name (potentially namespaced) of the port.
         :returns: tuple of the namespace and the key of ``name`` within it. The key still carries the namespace
-            separator if part of ``name`` is undeclared, in which case it matches no declared port.
+            separator if part of ``name`` is undeclared. Such a key matches a declared port only if that port was
+            given a name containing the separator, which ``ProcessSpec.output`` cannot produce because it splits
+            the name it is given on the separator.
         :raises ValueError: if a namespace in ``name`` does not exist and the namespace containing it is not
             dynamic, or is occupied by a port that is not a namespace.
         """
