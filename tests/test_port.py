@@ -245,6 +245,8 @@ class TestPortNamespace(TestCase):
 
         assert port_namespace.resolve('nested.undefined') == (port_namespace, 'nested.undefined')
         assert port_namespace.resolve('sub.nested.undefined') == (sub_namespace, 'nested.undefined')
+        assert port_namespace.resolve('a.b.c.d') == (port_namespace, 'a.b.c.d')
+        assert port_namespace.resolve('sub.a.b.c.d') == (sub_namespace, 'a.b.c.d')
         assert list(port_namespace) == ['sub']
         assert list(sub_namespace) == []
 

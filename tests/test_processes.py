@@ -1041,7 +1041,8 @@ class TestProcessNamespace(unittest.TestCase):
         """Test that emitting a namespaced output leaves the process specification untouched.
 
         The specification is built once per process class and shared by all its instances, so a port added while
-        emitting would validate the outputs of every later instance of that class.
+        emitting would validate the outputs of every later instance of that class. Names of every depth are
+        emitted, because a port planted only below the first undeclared segment is invisible to a shallow name.
         """
 
         class DynamicOutputProcess(Process):
@@ -1052,6 +1053,7 @@ class TestProcessNamespace(unittest.TestCase):
 
             def run(self):
                 self.out('alphas.filled', 1)
+                self.out('a.b.c.d', 2)
 
         description = DynamicOutputProcess.spec().outputs.get_description()
 
@@ -1059,8 +1061,30 @@ class TestProcessNamespace(unittest.TestCase):
         process.execute()
 
         self.assertTrue(process.is_successful)
-        self.assertEqual(process.outputs, {'alphas': {'filled': 1}})
+        self.assertEqual(process.outputs, {'alphas': {'filled': 1}, 'a': {'b': {'c': {'d': 2}}}})
         self.assertEqual(DynamicOutputProcess.spec().outputs.get_description(), description)
+
+    def test_out_empty_namespace_segment(self):
+        """Test that a name with an empty namespace segment is emitted as a dynamic output.
+
+        An undeclared path is validated as a single key of the namespace that governs it, so no part of it has to
+        be a valid port name. The value is stored under the segments of the name.
+        """
+
+        class DynamicOutputProcess(Process):
+            @classmethod
+            def define(cls, spec):
+                super().define(spec)
+                spec.outputs.valid_type = int
+
+            def run(self):
+                self.out('a..b', 1)
+
+        process = DynamicOutputProcess()
+        process.execute()
+
+        self.assertTrue(process.is_successful)
+        self.assertEqual(process.outputs, {'a': {'': {'b': 1}}})
 
     def test_out_leaf_after_namespace(self):
         """Test that a leaf value can be emitted under a name a sibling process used as a namespace."""
